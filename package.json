@@ -9,11 +9,11 @@
     "start:forge": "node --loader ts-node/esm forge.ts"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.13.0",
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.43.4",
     "@types/node": "^20.14.2",
     "@vercel/node": "^3.2.0",
-    "axios": "^1.7.2",
+    "axios": "^1.12.2",
     "cheerio": "^1.0.0-rc.12",
     "dotenv": "^16.4.5",
     "pdf-parse": "^1.1.1",
