@@ -2,33 +2,21 @@
 // Projekt Prometheus: Kombinierter Batch-Job (Sentinel + Forge)
 // Vercel Serverless Function (Hobby-Plan kompatibel)
 //
-// @ts-ignore
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-// @ts-ignore
 import { GoogleGenerativeAI } from "@google/generative-ai";
-// @ts-ignore
 import { default as Parser } from "rss-parser";
-// @ts-ignore
 import axios from "axios";
-// @ts-ignore
 import * as cheerio from "cheerio";
-// @ts-ignore
+// @ts-ignore // Keep this specific ignore due to the pdf-parse library issue
 import pdf from "pdf-parse/lib/pdf-parse.js";
-// @ts-ignore Importing type definitions should resolve this locally
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-// @ts-ignore
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Resend } from "resend";
 
 // --- Konfiguration ---
-// @ts-ignore
 const supabaseUrl = process.env.SUPABASE_URL;
-// @ts-ignore
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
-// @ts-ignore
 const geminiApiKey = process.env.GEMINI_API_KEY;
-// @ts-ignore
 const resendApiKey = process.env.RESEND_API_KEY;
-// @ts-ignore
 const alertEmailAddress = process.env.ALERT_EMAIL_ADDRESS; // Deine E-Mail-Adresse
 
 // Vercel Hobby Plan Timeout (max 5 Minuten)
@@ -47,12 +35,17 @@ let generalModel: any; // GenerativeModel
 let resend: Resend;
 
 // --- Vercel Handler ---
-export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse
-) {
-  if (!supabaseUrl || !supabaseServiceKey || !geminiApiKey || !resendApiKey || !alertEmailAddress) {
-    console.error("Fehler: Nicht alle Umgebungsvariablen sind gesetzt (Supabase, Gemini, Resend).");
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (
+    !supabaseUrl ||
+    !supabaseServiceKey ||
+    !geminiApiKey ||
+    !resendApiKey ||
+    !alertEmailAddress
+  ) {
+    console.error(
+      "Fehler: Nicht alle Umgebungsvariablen sind gesetzt (Supabase, Gemini, Resend)."
+    );
     return res.status(500).json({ error: "Env-Variablen nicht gesetzt." });
   }
 
@@ -67,7 +60,9 @@ export default async function handler(
   // --- SCHRITT 1: SENTINEL AUSFÜHREN ---
   console.log("[Batch] Starte Sentinel-Phase...");
   const sentinelResult = await runSentinel();
-  console.log(`[Batch] Sentinel-Phase beendet. ${sentinelResult.newEntries} neue Einträge.`);
+  console.log(
+    `[Batch] Sentinel-Phase beendet. ${sentinelResult.newEntries} neue Einträge.`
+  );
 
   // --- SCHRITT 2: FORGE AUSFÜHREN ---
   console.log("[Batch] Starte Forge-Phase...");
@@ -80,7 +75,7 @@ export default async function handler(
     message: "Batch-Lauf (Sentinel + Forge) abgeschlossen.",
     executionTimeMs: executionTime,
     sentinel: sentinelResult,
-    forge: forgeResult
+    forge: forgeResult,
   });
 }
 
@@ -90,32 +85,43 @@ export default async function handler(
 async function runSentinel() {
   console.log(`[Sentinel] Überwache ${RSS_FEED_URLS.length} Feeds.`);
   let newEntriesCount = 0;
-  const parser = new Parser();
+  const parser = new Parser(); // Parser Instanz
   for (const feedUrl of RSS_FEED_URLS) {
     try {
-      const response = await axios.get(feedUrl, { headers: { "User-Agent": "Mozilla/5.0" }, timeout: 10000 });
+      const response = await axios.get(feedUrl, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        timeout: 10000,
+      });
+      // Stellen Sie sicher, dass parser initialisiert ist, bevor parseString aufgerufen wird
       const feed = await parser.parseString(response.data);
       console.log(`[Sentinel] Feed gefunden: "${feed.title}"`);
       const itemsToProcess = (feed.items || []).slice(0, 15).reverse();
       for (const item of itemsToProcess) {
         const { title, link, pubDate } = item;
         if (!link || !title) continue;
-        const { data: existing, error: checkError } = await supabase.from("legislations").select("link").eq("link", link).maybeSingle();
+        const { data: existing, error: checkError } = await supabase
+          .from("legislations")
+          .select("link")
+          .eq("link", link)
+          .maybeSingle();
         if (existing || checkError) continue;
-        // KORREKTUR: Explizite Typisierung für insertError
-        const { error: insertError }: { error: any } = await supabase.from("legislations").insert({
-          title: title,
-          link: link,
-          publish_date: pubDate ? new Date(pubDate) : new Date(),
-          pdf_storage_path: null,
-          status: "pending",
-        });
+        // KORREKTUR: Explizite Typisierung für insertError und Entfernen des Syntaxfehlers '_'
+        const { error: insertError }: { error: any } = await supabase
+          .from("legislations")
+          .insert({
+            title: title,
+            link: link,
+            publish_date: pubDate ? new Date(pubDate) : new Date(),
+            pdf_storage_path: null,
+            status: "pending",
+          });
         if (!insertError) {
           console.log(`[Sentinel] NEU: ${title}`);
           newEntriesCount++;
         } else {
-          // Loggen, falls ein Fehler beim Einfügen auftritt
-          console.error(`[Sentinel] FEHLER beim Einfügen: ${insertError.message}`);
+          console.error(
+            `[Sentinel] FEHLER beim Einfügen: ${insertError.message}`
+          );
         }
       }
     } catch (error: any) {
@@ -124,7 +130,6 @@ async function runSentinel() {
   }
   return { newEntries: newEntriesCount };
 }
-
 
 // ===========================================
 // FORGE LOGIK (Phase 2)
@@ -152,18 +157,35 @@ async function runForge(startTime: number) {
       item = foundItem;
       console.log(`[Forge] VERARBEITE: ${item.title}`);
 
-      await supabase.from("legislations").update({ status: "processing" }).eq("id", item.id);
+      await supabase
+        .from("legislations")
+        .update({ status: "processing" })
+        .eq("id", item.id);
       const pdfUrl = await scrapeAndFindPdfUrl(item.link);
       const text = await downloadAndParsePdf(pdfUrl);
-      await supabase.from("legislations").update({ pdf_storage_path: pdfUrl }).eq("id", item.id);
+      await supabase
+        .from("legislations")
+        .update({ pdf_storage_path: pdfUrl })
+        .eq("id", item.id);
 
       const scoutReports = await runScoutAnalysis(text);
-      const finalJsonString = await runGeneralAnalysis(scoutReports, item.title);
+      const finalJsonString = await runGeneralAnalysis(
+        scoutReports,
+        item.title
+      );
       const analysisJson = JSON.parse(finalJsonString);
 
-      if (!analysisJson.confidence_score_percent || analysisJson.confidence_score_percent <= 0) {
-        console.log(`[Forge] ERFOLG (Ignoriert): Score (0) zu niedrig. ${item.title}`);
-        await supabase.from("legislations").update({ status: "completed" }).eq("id", item.id);
+      if (
+        !analysisJson.confidence_score_percent ||
+        analysisJson.confidence_score_percent <= 0
+      ) {
+        console.log(
+          `[Forge] ERFOLG (Ignoriert): Score (0) zu niedrig. ${item.title}`
+        );
+        await supabase
+          .from("legislations")
+          .update({ status: "completed" })
+          .eq("id", item.id);
         jobsIgnored++;
         continue;
       }
@@ -175,23 +197,36 @@ async function runForge(startTime: number) {
         time_horizon_months: analysisJson.time_horizon_months || 0,
       });
 
-      await supabase.from("legislations").update({ status: "completed" }).eq("id", item.id);
+      await supabase
+        .from("legislations")
+        .update({ status: "completed" })
+        .eq("id", item.id);
       console.log(`[Forge] ERFOLG: ${item.title}`);
       jobsProcessed++;
 
       try {
         await sendNewAnalysisAlert(analysisJson, item.link);
         emailsSent++;
-        console.log(`[Forge] E-Mail-Benachrichtigung gesendet für: ${item.title}`);
+        console.log(
+          `[Forge] E-Mail-Benachrichtigung gesendet für: ${item.title}`
+        );
       } catch (emailError: any) {
-        console.error(`[Forge] FEHLER beim Senden der E-Mail:`, emailError.message);
+        console.error(
+          `[Forge] FEHLER beim Senden der E-Mail:`,
+          emailError.message
+        );
       }
-
     } catch (error: any) {
-      console.error(`[Forge] PIPELINE-FEHLER bei ${item ? item.title : "Unbekanntem Job"}:`, error.message);
+      console.error(
+        `[Forge] PIPELINE-FEHLER bei ${item ? item.title : "Unbekanntem Job"}:`,
+        error.message
+      );
       jobsFailed++;
       if (item) {
-        await supabase.from("legislations").update({ status: "failed", pdf_storage_path: error.message }).eq("id", item.id);
+        await supabase
+          .from("legislations")
+          .update({ status: "failed", pdf_storage_path: error.message })
+          .eq("id", item.id);
       }
     }
   }
@@ -204,7 +239,7 @@ async function runForge(startTime: number) {
     ignored: jobsIgnored,
     failed: jobsFailed,
     emailsSent: emailsSent,
-    executionTimeMs: executionTime
+    executionTimeMs: executionTime,
   };
 }
 
@@ -216,10 +251,13 @@ async function sendNewAnalysisAlert(analysis: any, sourceLink: string) {
     law_title,
     the_hidden_opportunity,
     confidence_score_percent,
-    trade_strategy
+    trade_strategy,
   } = analysis;
 
-  const subject = `Prometheus Alpha: ${confidence_score_percent}% | ${law_title.substring(0, 50)}...`;
+  const subject = `Prometheus Alpha: ${confidence_score_percent}% | ${law_title.substring(
+    0,
+    50
+  )}...`;
 
   const htmlBody = `
     <div>
@@ -229,25 +267,30 @@ async function sendNewAnalysisAlert(analysis: any, sourceLink: string) {
       <h3>Die versteckte Chance (Alpha):</h3>
       <p>${the_hidden_opportunity}</p>
       <h3>Primäre Handelsstrategie:</h3>
-      <p>${trade_strategy?.primary_trade || 'N/A'}</p> {/* Sicherer Zugriff */}
+      <p>${trade_strategy?.primary_trade || "N/A"}</p> {/* Sicherer Zugriff */}
       <p><a href="${sourceLink}">Originaldokument ansehen</a></p>
       <p><small>Gehe zum Dashboard, um die volle Analyse zu sehen.</small></p>
     </div>
   `;
 
   if (!resend || !alertEmailAddress) {
-      console.error("[Forge] Resend oder E-Mail-Adresse nicht initialisiert für E-Mail-Versand.");
-      return;
+    console.error(
+      "[Forge] Resend oder E-Mail-Adresse nicht initialisiert für E-Mail-Versand."
+    );
+    return;
   }
 
+  // Ensure 'from' address uses a verified domain
+  const verifiedFromAddress =
+    "Prometheus Alert <alerts@yourverifieddomain.com>"; // <-- UPDATE THIS
+
   await resend.emails.send({
-    from: 'Prometheus Alert <alerts@prometheus.dein-domain-name.de>', // MUSS eine verifizierte Domain sein
+    from: verifiedFromAddress,
     to: alertEmailAddress,
     subject: subject,
     html: htmlBody,
   });
 }
-
 
 // --- Alle Hilfsfunktionen (Scraper, Parser, Scouts, General, Backoff, etc.) ---
 
@@ -261,12 +304,19 @@ async function scrapeAndFindPdfUrl(pageUrl: string): Promise<string> {
   let pdfLink: string | undefined;
   $('a[href$=".pdf"][href*="EN"]').each((i, el) => {
     const href = $(el).attr("href");
-    if (href) { pdfLink = href; return false; }
+    if (href) {
+      pdfLink = href;
+      return false;
+    }
   });
   if (pdfLink) {
-    return pdfLink.startsWith("/") ? `https://www.europarl.europa.eu${pdfLink}` : pdfLink;
+    return pdfLink.startsWith("/")
+      ? `https://www.europarl.europa.eu${pdfLink}`
+      : pdfLink;
   }
-  throw new Error(`Konnte keinen _EN.pdf Link auf der Seite finden: ${pageUrl}`);
+  throw new Error(
+    `Konnte keinen _EN.pdf Link auf der Seite finden: ${pageUrl}`
+  );
 }
 
 async function downloadAndParsePdf(pdfUrl: string): Promise<string> {
@@ -276,8 +326,10 @@ async function downloadAndParsePdf(pdfUrl: string): Promise<string> {
     timeout: 15000,
   });
   const buffer = response.data;
+  // @ts-ignore // pdf function might not have perfect types for buffer
   const data = await pdf(buffer);
   console.log(`[Forge] PDF geparst: ${data.text.length} Zeichen.`);
+  // @ts-ignore // data.text might be inferred as 'any'
   return data.text;
 }
 
@@ -286,7 +338,6 @@ async function runScoutAnalysis(fullText: string): Promise<string[]> {
   const chunks = fullText.match(/[\s\S]{1,10000}/g) || [];
   console.log(`[Forge] Text in ${chunks.length} Blöcke aufgeteilt.`);
 
-  // KORREKTUR: Explizite Typisierung der Promises
   const scoutPromises: Promise<string>[] = chunks.map((chunk, i) => {
     const scoutPrompt = `
 You are a forensic regulatory analyst at a quantitative hedge fund. Analyze ONLY this text segment of an EU regulation.
@@ -316,20 +367,19 @@ ${chunk}
 """
 `;
     return exponentialBackoff(() =>
-      // KORREKTUR: Explizite Typisierung für result
       scoutModel.generateContent(scoutPrompt).then((result: any) => {
+        // result as 'any'
         console.log(`[Forge] Scout ${i + 1}/${chunks.length} fertig.`);
-        // @ts-ignore // Sicherer Zugriff auf response, falls API-Antwort variiert
         return result?.response?.text() ?? "Fehler bei Scout-Antwort";
       })
     );
   });
-  // KORREKTUR: Explizite Typisierung von scoutReports
-  const scoutReports: string[] = await Promise.all(scoutPromises);
-  // KORREKTUR: Filter verwendet jetzt korrekten Typ 'string' für 'report'
-  return scoutReports.filter((report: string) => !report.includes("NO ALPHA - IGNORE"));
-}
 
+  const scoutReports: string[] = await Promise.all(scoutPromises);
+  return scoutReports.filter(
+    (report: string) => report && !report.includes("NO ALPHA - IGNORE")
+  ); // Added check for report existence
+}
 
 async function runGeneralAnalysis(
   scoutReports: string[],
@@ -337,18 +387,32 @@ async function runGeneralAnalysis(
 ): Promise<string> {
   console.log("[Forge] Starte General-Analyse (Reduce) mit Gemini 2.5 Pro...");
   if (scoutReports.length === 0) {
-    console.log("[Forge] Keine relevanten Berichte von Scouts. General wird übersprungen.");
+    console.log(
+      "[Forge] Keine relevanten Berichte von Scouts. General wird übersprungen."
+    );
     return JSON.stringify({
       law_title: lawTitle,
-      summary_of_law: "Keine relevanten finanziellen Auswirkungen von Scouts identifiziert.",
+      summary_of_law:
+        "Keine relevanten finanziellen Auswirkungen von Scouts identifiziert.",
       the_hidden_opportunity: "N/A",
       affected_sectors: [],
       specific_companies_short: [],
       specific_companies_long: [],
       confidence_score_percent: 0,
       time_horizon_months: 0,
-      trade_strategy: { primary_trade: "Keine Aktion.", hedge_components: [], position_sizing: "N/A", catalyst_timing: "N/A", risk_factors: [] },
-      quantitative_metrics: { estimated_impact_bps: 0, liquidity_requirement: "N/A", correlation_breakdown: "N/A", capacity_estimate_millions: 0 }
+      trade_strategy: {
+        primary_trade: "Keine Aktion.",
+        hedge_components: [],
+        position_sizing: "N/A",
+        catalyst_timing: "N/A",
+        risk_factors: [],
+      },
+      quantitative_metrics: {
+        estimated_impact_bps: 0,
+        liquidity_requirement: "N/A",
+        correlation_breakdown: "N/A",
+        capacity_estimate_millions: 0,
+      },
     });
   }
 
@@ -398,45 +462,93 @@ ${aggregatedReports}
 - Always include the hedge and risk management
 Your analysis must be immediately actionable by our trading desk.
 `;
-  // @ts-ignore
-  const result: any = await exponentialBackoff(() => generalModel.generateContent(prompt));
-  // @ts-ignore
-  let jsonText = result?.response?.text()?.replace(/^```json\n/, "")?.replace(/\n```$/, "") ?? "{}"; // Sicherer Zugriff und Fallback
+
+  const result: any = await exponentialBackoff(() =>
+    generalModel.generateContent(prompt)
+  );
+  let jsonText =
+    result?.response
+      ?.text()
+      ?.replace(/^```json\n/, "")
+      ?.replace(/\n```$/, "") ?? "{}"; // Safe access and fallback
   try {
+    // Attempt to parse early to catch errors before fix attempt
     JSON.parse(jsonText);
   } catch (e) {
-    console.error("[Forge] General hat kein valides JSON zurückgegeben. Versuche Reparatur...");
+    console.error(
+      "[Forge] General hat kein valides JSON zurückgegeben. Versuche Reparatur..."
+    );
     jsonText = await fixBrokenJson(jsonText, lawTitle);
+    try {
+      // Try parsing again after fix
+      JSON.parse(jsonText);
+    } catch (fixError) {
+      console.error(
+        "[Forge] JSON-Reparatur fehlgeschlagen. Überspringe Job.",
+        fixError
+      );
+      // Throw error to mark job as failed if fix doesn't work
+      throw new Error(
+        "Failed to generate or fix JSON response from General model."
+      );
+    }
   }
   console.log("[Forge] General-Analyse fertig.");
   return jsonText;
 }
 
-// @ts-ignore
-async function exponentialBackoff<T>(fn: () => Promise<T>, retries = 5, delay = 1000): Promise<T> {
+async function exponentialBackoff<T>(
+  fn: () => Promise<T>,
+  retries = 5,
+  delay = 1000
+): Promise<T> {
   try {
     return await fn();
   } catch (error: any) {
     if (retries > 0) {
-      console.warn(`[Forge] API-Fehler (Rate Limit?). Versuche erneut in ${delay}ms...`);
+      console.warn(
+        `[Forge] API-Fehler (Rate Limit?). Versuche erneut in ${delay}ms...`
+      );
       await new Promise((res) => setTimeout(res, delay));
       return exponentialBackoff(fn, retries - 1, delay * 2);
     }
-    throw error;
+    // Specific check for common Gemini errors that shouldn't be retried indefinitely
+    if (
+      error.message.includes("400 Bad Request") ||
+      error.message.includes("invalid argument")
+    ) {
+      console.error("[Forge] Nicht behebbarer API-Fehler:", error.message);
+      throw error; // Don't retry bad requests
+    }
+    console.error("[Forge] API-Fehler nach mehreren Versuchen:", error);
+    throw error; // Rethrow after retries exhausted
   }
 }
 
-async function fixBrokenJson(brokenJson: string, title: string): Promise<string> {
+async function fixBrokenJson(
+  brokenJson: string,
+  title: string
+): Promise<string> {
   const fixPrompt = `
-    Der folgende Text sollte valides JSON sein, ist es aber nicht. 
-    Bitte korrigiere es und gib NUR das valide JSON zurück.
+    Der folgende Text sollte valides JSON sein, ist es aber nicht.
+    Bitte korrigiere es und gib NUR das valide JSON zurück, ohne einleitende oder abschließende Markdown-Formatierung wie \`\`\`json.
     Der Titel des Gesetzes lautet: "${title}"
+
     DEFEKTES JSON:
     ${brokenJson}
   `;
-  // @ts-ignore
-  const result: any = await generalModel.generateContent(fixPrompt);
-  // @ts-ignore
-  return result?.response?.text()?.replace(/^```json\n/, "")?.replace(/\n```$/, "") ?? "{}"; // Sicherer Zugriff und Fallback
-}
 
+  try {
+    const result: any = await generalModel.generateContent(fixPrompt);
+    // Return the fixed JSON, ensuring it's just the JSON object
+    return (
+      result?.response
+        ?.text()
+        ?.replace(/^```json\s*/, "")
+        ?.replace(/\s*```$/, "") ?? "{}"
+    );
+  } catch (e) {
+    console.error("[Forge] Fehler beim Versuch, JSON zu reparieren:", e);
+    return "{}"; // Return empty JSON on fix failure
+  }
+}
