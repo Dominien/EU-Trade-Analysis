@@ -2,15 +2,16 @@
 // Projekt Prometheus: Kombinierter Batch-Job (Sentinel + Forge)
 // Vercel Serverless Function (Hobby-Plan kompatibel)
 //
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { default as Parser } from "rss-parser";
-import axios from "axios";
-import * as cheerio from "cheerio";
+// Importiere Module unter Namespace
+import * as Supabase from "@supabase/supabase-js";
+import * as GenAI from "@google/generative-ai";
+import * as RssParser from "rss-parser";
+import Axios from "axios"; // Default export muss anders gehandhabt werden
+import * as Cheerio from "cheerio";
 // @ts-ignore // Keep this specific ignore due to the pdf-parse library issue
 import pdf from "pdf-parse/lib/pdf-parse.js";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { Resend } from "resend";
+import * as ResendPackage from "resend"; // Verwende Namespace für Resend
 
 // --- Konfiguration ---
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -29,10 +30,11 @@ const RSS_FEED_URLS = [
 ];
 
 // --- Globale Instanzen ---
-let supabase: SupabaseClient;
-let scoutModel: any; // GenerativeModel
-let generalModel: any; // GenerativeModel
-let resend: Resend;
+// Verwende Typen aus den importierten Modulen
+let supabase: Supabase.SupabaseClient;
+let scoutModel: GenAI.GenerativeModel;
+let generalModel: GenAI.GenerativeModel;
+let resend: ResendPackage.Resend;
 
 // --- Vercel Handler ---
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -49,11 +51,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: "Env-Variablen nicht gesetzt." });
   }
 
-  supabase = createClient(supabaseUrl, supabaseServiceKey);
-  const genAI = new GoogleGenerativeAI(geminiApiKey);
+  // Verwende Namespace-Zugriff
+  supabase = Supabase.createClient(supabaseUrl, supabaseServiceKey);
+  const genAI = new GenAI.GoogleGenerativeAI(geminiApiKey);
   scoutModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
   generalModel = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
-  resend = new Resend(resendApiKey);
+  // Verwende Namespace-Zugriff für Resend
+  resend = new ResendPackage.Resend(resendApiKey);
 
   const startTime = Date.now();
 
@@ -85,14 +89,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 async function runSentinel() {
   console.log(`[Sentinel] Überwache ${RSS_FEED_URLS.length} Feeds.`);
   let newEntriesCount = 0;
-  const parser = new Parser(); // Parser Instanz
+  // @ts-ignore // RssParser might not export default correctly for TS/ESM
+  const parser = new RssParser.default(); // Access default export if needed
   for (const feedUrl of RSS_FEED_URLS) {
     try {
-      const response = await axios.get(feedUrl, {
+      // Verwende Axios.default
+      const response = await Axios.default.get(feedUrl, {
         headers: { "User-Agent": "Mozilla/5.0" },
         timeout: 10000,
       });
-      // Stellen Sie sicher, dass parser initialisiert ist, bevor parseString aufgerufen wird
       const feed = await parser.parseString(response.data);
       console.log(`[Sentinel] Feed gefunden: "${feed.title}"`);
       const itemsToProcess = (feed.items || []).slice(0, 15).reverse();
@@ -105,7 +110,7 @@ async function runSentinel() {
           .eq("link", link)
           .maybeSingle();
         if (existing || checkError) continue;
-        // KORREKTUR: Explizite Typisierung für insertError und Entfernen des Syntaxfehlers '_'
+
         const { error: insertError }: { error: any } = await supabase
           .from("legislations")
           .insert({
@@ -296,11 +301,13 @@ async function sendNewAnalysisAlert(analysis: any, sourceLink: string) {
 
 async function scrapeAndFindPdfUrl(pageUrl: string): Promise<string> {
   console.log(`[Forge] Scrape... ${pageUrl}`);
-  const { data: html } = await axios.get(pageUrl, {
+  // Verwende Axios.default
+  const { data: html } = await Axios.default.get(pageUrl, {
     headers: { "User-Agent": "Mozilla/5.0" },
     timeout: 15000,
   });
-  const $ = cheerio.load(html);
+  // Verwende Cheerio Namespace
+  const $ = Cheerio.load(html);
   let pdfLink: string | undefined;
   $('a[href$=".pdf"][href*="EN"]').each((i, el) => {
     const href = $(el).attr("href");
@@ -321,7 +328,8 @@ async function scrapeAndFindPdfUrl(pageUrl: string): Promise<string> {
 
 async function downloadAndParsePdf(pdfUrl: string): Promise<string> {
   console.log(`[Forge] Lade PDF... ${pdfUrl}`);
-  const response = await axios.get(pdfUrl, {
+  // Verwende Axios.default
+  const response = await Axios.default.get(pdfUrl, {
     responseType: "arraybuffer",
     timeout: 15000,
   });
@@ -367,18 +375,21 @@ ${chunk}
 """
 `;
     return exponentialBackoff(() =>
+      // Typisierung für result als any beibehalten oder spezifischer machen
       scoutModel.generateContent(scoutPrompt).then((result: any) => {
-        // result as 'any'
         console.log(`[Forge] Scout ${i + 1}/${chunks.length} fertig.`);
+        // Sicherer Zugriff auf response, falls API-Antwort variiert
         return result?.response?.text() ?? "Fehler bei Scout-Antwort";
       })
     );
   });
 
   const scoutReports: string[] = await Promise.all(scoutPromises);
+  // Sicherstellen, dass report existiert und ein string ist, bevor includes aufgerufen wird
   return scoutReports.filter(
-    (report: string) => report && !report.includes("NO ALPHA - IGNORE")
-  ); // Added check for report existence
+    (report: string | null | undefined) =>
+      typeof report === "string" && !report.includes("NO ALPHA - IGNORE")
+  );
 }
 
 async function runGeneralAnalysis(
@@ -472,7 +483,6 @@ Your analysis must be immediately actionable by our trading desk.
       ?.replace(/^```json\n/, "")
       ?.replace(/\n```$/, "") ?? "{}"; // Safe access and fallback
   try {
-    // Attempt to parse early to catch errors before fix attempt
     JSON.parse(jsonText);
   } catch (e) {
     console.error(
@@ -480,14 +490,12 @@ Your analysis must be immediately actionable by our trading desk.
     );
     jsonText = await fixBrokenJson(jsonText, lawTitle);
     try {
-      // Try parsing again after fix
       JSON.parse(jsonText);
     } catch (fixError) {
       console.error(
         "[Forge] JSON-Reparatur fehlgeschlagen. Überspringe Job.",
         fixError
       );
-      // Throw error to mark job as failed if fix doesn't work
       throw new Error(
         "Failed to generate or fix JSON response from General model."
       );
@@ -512,16 +520,15 @@ async function exponentialBackoff<T>(
       await new Promise((res) => setTimeout(res, delay));
       return exponentialBackoff(fn, retries - 1, delay * 2);
     }
-    // Specific check for common Gemini errors that shouldn't be retried indefinitely
     if (
       error.message.includes("400 Bad Request") ||
       error.message.includes("invalid argument")
     ) {
       console.error("[Forge] Nicht behebbarer API-Fehler:", error.message);
-      throw error; // Don't retry bad requests
+      throw error;
     }
     console.error("[Forge] API-Fehler nach mehreren Versuchen:", error);
-    throw error; // Rethrow after retries exhausted
+    throw error;
   }
 }
 
