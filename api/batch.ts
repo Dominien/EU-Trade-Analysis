@@ -6,7 +6,7 @@
 import * as Supabase from "@supabase/supabase-js";
 import * as GenAI from "@google/generative-ai";
 import * as RssParser from "rss-parser";
-import Axios from "axios"; // Default export muss anders gehandhabt werden
+import axios from "axios"; // Standard-Import für Axios, da `.default` Probleme macht
 import * as Cheerio from "cheerio";
 // @ts-ignore // Keep this specific ignore due to the pdf-parse library issue
 import pdf from "pdf-parse/lib/pdf-parse.js";
@@ -93,8 +93,8 @@ async function runSentinel() {
   const parser = new RssParser.default(); // Access default export if needed
   for (const feedUrl of RSS_FEED_URLS) {
     try {
-      // Verwende Axios.default
-      const response = await Axios.default.get(feedUrl, {
+      // KORREKTUR: Verwende 'axios.get' direkt
+      const response = await axios.get(feedUrl, {
         headers: { "User-Agent": "Mozilla/5.0" },
         timeout: 10000,
       });
@@ -301,8 +301,8 @@ async function sendNewAnalysisAlert(analysis: any, sourceLink: string) {
 
 async function scrapeAndFindPdfUrl(pageUrl: string): Promise<string> {
   console.log(`[Forge] Scrape... ${pageUrl}`);
-  // Verwende Axios.default
-  const { data: html } = await Axios.default.get(pageUrl, {
+  // KORREKTUR: Verwende 'axios.get' direkt
+  const { data: html } = await axios.get(pageUrl, {
     headers: { "User-Agent": "Mozilla/5.0" },
     timeout: 15000,
   });
@@ -328,8 +328,8 @@ async function scrapeAndFindPdfUrl(pageUrl: string): Promise<string> {
 
 async function downloadAndParsePdf(pdfUrl: string): Promise<string> {
   console.log(`[Forge] Lade PDF... ${pdfUrl}`);
-  // Verwende Axios.default
-  const response = await Axios.default.get(pdfUrl, {
+  // KORREKTUR: Verwende 'axios.get' direkt
+  const response = await axios.get(pdfUrl, {
     responseType: "arraybuffer",
     timeout: 15000,
   });
