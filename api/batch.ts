@@ -309,7 +309,7 @@ async function scrapeAndFindPdfUrl(pageUrl: string): Promise<string> {
   // Verwende Cheerio Namespace
   const $ = Cheerio.load(html);
   let pdfLink: string | undefined;
-  $('a[href$=".pdf"][href*="EN"]').each((i, el) => {
+  $('a[href$=".pdf"][href*="EN"]').each((i: number, el: Cheerio.Element) => {
     const href = $(el).attr("href");
     if (href) {
       pdfLink = href;
