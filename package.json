@@ -1,0 +1,25 @@
+{
+  "name": "prometheus-pipeline",
+  "version": "1.0.0",
+  "description": "Phase 1 (Sentinel) und Phase 2 (Forge) für Projekt Prometheus",
+  "main": "sentinel.js",
+  "type": "module",
+  "scripts": {
+    "start:sentinel": "node --loader ts-node/esm sentinel.ts",
+    "start:forge": "node --loader ts-node/esm forge.ts"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.13.0",
+    "@supabase/supabase-js": "^2.43.4",
+    "axios": "^1.7.2",
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.4.5",
+    "pdf-parse": "^1.1.1",
+    "rss-parser": "^3.13.0"
+  },
+  "devDependencies": {
+    "@types/pdf-parse": "^1.1.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}
