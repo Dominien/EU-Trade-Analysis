@@ -1,12 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/sentinel",
+      "path": "/api/batch",
       "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/forge",
-      "schedule": "5 8 * * *"
     }
   ]
 }
