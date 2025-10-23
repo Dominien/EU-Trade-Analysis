@@ -7,7 +7,7 @@ import * as Supabase from "@supabase/supabase-js";
 import * as GenAI from "@google/generative-ai";
 import * as RssParser from "rss-parser";
 import axios from "axios"; // Standard-Import für Axios, da `.default` Probleme macht
-import * as Cheerio from "cheerio";
+import { load } from "cheerio";
 // @ts-ignore // Keep this specific ignore due to the pdf-parse library issue
 import pdf from "pdf-parse/lib/pdf-parse.js";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -306,16 +306,17 @@ async function scrapeAndFindPdfUrl(pageUrl: string): Promise<string> {
     headers: { "User-Agent": "Mozilla/5.0" },
     timeout: 15000,
   });
-  // Verwende Cheerio Namespace
-  const $ = Cheerio.load(html);
+  // Lade HTML mit Cheerio
+  const $ = load(html);
   let pdfLink: string | undefined;
-  $('a[href$=".pdf"][href*="EN"]').each((i: number, el: Cheerio.Element) => {
-    const href = $(el).attr("href");
+  const links = $('a[href$=".pdf"][href*="EN"]');
+  for (const link of links) {
+    const href = $(link).attr("href");
     if (href) {
       pdfLink = href;
-      return false;
+      break;
     }
-  });
+  }
   if (pdfLink) {
     return pdfLink.startsWith("/")
       ? `https://www.europarl.europa.eu${pdfLink}`
