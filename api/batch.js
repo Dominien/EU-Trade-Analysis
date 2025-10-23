@@ -10,7 +10,6 @@ import axios from "axios"; // Standard-Import für Axios, da `.default` Probleme
 import { load } from "cheerio";
 // @ts-ignore // Keep this specific ignore due to the pdf-parse library issue
 import pdf from "pdf-parse/lib/pdf-parse.js";
-import type { VercelRequest, VercelResponse } from "@vercel/node";
 import * as ResendPackage from "resend"; // Verwende Namespace für Resend
 
 // --- Konfiguration ---
@@ -30,14 +29,13 @@ const RSS_FEED_URLS = [
 ];
 
 // --- Globale Instanzen ---
-// Verwende Typen aus den importierten Modulen
-let supabase: Supabase.SupabaseClient;
-let scoutModel: GenAI.GenerativeModel;
-let generalModel: GenAI.GenerativeModel;
-let resend: ResendPackage.Resend;
+let supabase;
+let scoutModel;
+let generalModel;
+let resend;
 
 // --- Vercel Handler ---
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req, res) {
   if (
     !supabaseUrl ||
     !supabaseServiceKey ||
@@ -111,7 +109,7 @@ async function runSentinel() {
           .maybeSingle();
         if (existing || checkError) continue;
 
-        const { error: insertError }: { error: any } = await supabase
+        const { error: insertError } = await supabase
           .from("legislations")
           .insert({
             title: title,
@@ -129,7 +127,7 @@ async function runSentinel() {
           );
         }
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[Sentinel] FEHLER bei Feed ${feedUrl}:`, error.message);
     }
   }
@@ -139,14 +137,14 @@ async function runSentinel() {
 // ===========================================
 // FORGE LOGIK (Phase 2)
 // ===========================================
-async function runForge(startTime: number) {
+async function runForge(startTime) {
   let jobsProcessed = 0;
   let jobsIgnored = 0;
   let jobsFailed = 0;
   let emailsSent = 0;
 
   while (Date.now() - startTime < MAX_EXECUTION_TIME_MS) {
-    let item: any; // item als 'any' deklariert, um Fehler zu vermeiden
+    let item;
     try {
       const { data: foundItem, error: selectError } = await supabase
         .from("legislations")
@@ -215,13 +213,13 @@ async function runForge(startTime: number) {
         console.log(
           `[Forge] E-Mail-Benachrichtigung gesendet für: ${item.title}`
         );
-      } catch (emailError: any) {
+      } catch (emailError) {
         console.error(
           `[Forge] FEHLER beim Senden der E-Mail:`,
           emailError.message
         );
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error(
         `[Forge] PIPELINE-FEHLER bei ${item ? item.title : "Unbekanntem Job"}:`,
         error.message
@@ -251,7 +249,7 @@ async function runForge(startTime: number) {
 // ===========================================
 // NEUE E-MAIL-FUNKTION (Resend)
 // ===========================================
-async function sendNewAnalysisAlert(analysis: any, sourceLink: string) {
+async function sendNewAnalysisAlert(analysis, sourceLink) {
   const {
     law_title,
     the_hidden_opportunity,
@@ -299,7 +297,7 @@ async function sendNewAnalysisAlert(analysis: any, sourceLink: string) {
 
 // --- Alle Hilfsfunktionen (Scraper, Parser, Scouts, General, Backoff, etc.) ---
 
-async function scrapeAndFindPdfUrl(pageUrl: string): Promise<string> {
+async function scrapeAndFindPdfUrl(pageUrl) {
   console.log(`[Forge] Scrape... ${pageUrl}`);
   // KORREKTUR: Verwende 'axios.get' direkt
   const { data: html } = await axios.get(pageUrl, {
@@ -308,7 +306,7 @@ async function scrapeAndFindPdfUrl(pageUrl: string): Promise<string> {
   });
   // Lade HTML mit Cheerio
   const $ = load(html);
-  let pdfLink: string | undefined;
+  let pdfLink;
   const links = $('a[href$=".pdf"][href*="EN"]');
   for (const link of links) {
     const href = $(link).attr("href");
@@ -327,7 +325,7 @@ async function scrapeAndFindPdfUrl(pageUrl: string): Promise<string> {
   );
 }
 
-async function downloadAndParsePdf(pdfUrl: string): Promise<string> {
+async function downloadAndParsePdf(pdfUrl) {
   console.log(`[Forge] Lade PDF... ${pdfUrl}`);
   // KORREKTUR: Verwende 'axios.get' direkt
   const response = await axios.get(pdfUrl, {
@@ -342,12 +340,12 @@ async function downloadAndParsePdf(pdfUrl: string): Promise<string> {
   return data.text;
 }
 
-async function runScoutAnalysis(fullText: string): Promise<string[]> {
+async function runScoutAnalysis(fullText) {
   console.log("[Forge] Starte Scout-Analyse (Map) mit Gemini 2.5 Flash...");
   const chunks = fullText.match(/[\s\S]{1,10000}/g) || [];
   console.log(`[Forge] Text in ${chunks.length} Blöcke aufgeteilt.`);
 
-  const scoutPromises: Promise<string>[] = chunks.map((chunk, i) => {
+  const scoutPromises = chunks.map((chunk, i) => {
     const scoutPrompt = `
 You are a forensic regulatory analyst at a quantitative hedge fund. Analyze ONLY this text segment of an EU regulation.
 **FOCUS AREAS (in priority order):**
@@ -377,7 +375,7 @@ ${chunk}
 `;
     return exponentialBackoff(() =>
       // Typisierung für result als any beibehalten oder spezifischer machen
-      scoutModel.generateContent(scoutPrompt).then((result: any) => {
+      scoutModel.generateContent(scoutPrompt).then(result => {
         console.log(`[Forge] Scout ${i + 1}/${chunks.length} fertig.`);
         // Sicherer Zugriff auf response, falls API-Antwort variiert
         return result?.response?.text() ?? "Fehler bei Scout-Antwort";
@@ -385,18 +383,18 @@ ${chunk}
     );
   });
 
-  const scoutReports: string[] = await Promise.all(scoutPromises);
+  const scoutReports = await Promise.all(scoutPromises);
   // Sicherstellen, dass report existiert und ein string ist, bevor includes aufgerufen wird
   return scoutReports.filter(
-    (report: string | null | undefined) =>
+    report =>
       typeof report === "string" && !report.includes("NO ALPHA - IGNORE")
   );
 }
 
 async function runGeneralAnalysis(
-  scoutReports: string[],
-  lawTitle: string
-): Promise<string> {
+  scoutReports,
+  lawTitle
+) {
   console.log("[Forge] Starte General-Analyse (Reduce) mit Gemini 2.5 Pro...");
   if (scoutReports.length === 0) {
     console.log(
@@ -475,7 +473,7 @@ ${aggregatedReports}
 Your analysis must be immediately actionable by our trading desk.
 `;
 
-  const result: any = await exponentialBackoff(() =>
+  const result = await exponentialBackoff(() =>
     generalModel.generateContent(prompt)
   );
   let jsonText =
@@ -506,14 +504,14 @@ Your analysis must be immediately actionable by our trading desk.
   return jsonText;
 }
 
-async function exponentialBackoff<T>(
-  fn: () => Promise<T>,
+async function exponentialBackoff(
+  fn,
   retries = 5,
   delay = 1000
-): Promise<T> {
+) {
   try {
     return await fn();
-  } catch (error: any) {
+  } catch (error) {
     if (retries > 0) {
       console.warn(
         `[Forge] API-Fehler (Rate Limit?). Versuche erneut in ${delay}ms...`
@@ -534,9 +532,9 @@ async function exponentialBackoff<T>(
 }
 
 async function fixBrokenJson(
-  brokenJson: string,
-  title: string
-): Promise<string> {
+  brokenJson,
+  title
+) {
   const fixPrompt = `
     Der folgende Text sollte valides JSON sein, ist es aber nicht.
     Bitte korrigiere es und gib NUR das valide JSON zurück, ohne einleitende oder abschließende Markdown-Formatierung wie \`\`\`json.
@@ -547,7 +545,7 @@ async function fixBrokenJson(
   `;
 
   try {
-    const result: any = await generalModel.generateContent(fixPrompt);
+    const result = await generalModel.generateContent(fixPrompt);
     // Return the fixed JSON, ensuring it's just the JSON object
     return (
       result?.response

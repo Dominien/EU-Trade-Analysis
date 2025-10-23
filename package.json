@@ -4,10 +4,7 @@
   "description": "Prometheus MVP (Sentinel & Forge)",
   "main": "index.js",
   "type": "module",
-  "scripts": {
-    "start:sentinel": "node --loader ts-node/esm sentinel.ts",
-    "start:forge": "node --loader ts-node/esm forge.ts"
-  },
+  "scripts": {},
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.43.4",
@@ -17,11 +14,7 @@
     "dotenv": "^16.4.5",
     "pdf-parse": "^1.1.1",
     "resend": "^3.4.0",
-    "rss-parser": "^3.13.0",
-    "typescript": "^5.4.5"
+    "rss-parser": "^3.13.0"
   },
-  "devDependencies": {
-    "@types/node": "^24.9.1",
-    "ts-node": "^10.9.2"
-  }
+  "devDependencies": {}
 }
